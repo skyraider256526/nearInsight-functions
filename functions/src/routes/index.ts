@@ -1,12 +1,10 @@
-import Router from 'koa-router';
-import HttpStatus from 'http-status';
+import { Router } from "express";
 
-const router = new Router()
+import postRouter from "./post";
+import userRouter from "./user";
 
-router.get("/",async (ctx,next)=>{
-  ctx.status = HttpStatus.OK;
-  ctx.body = 'Hello Hi';
-  await next();
-});
+const rootRouter = Router();
 
-export default router
+rootRouter.use("/post", postRouter).use("/user", userRouter);
+
+export default rootRouter;

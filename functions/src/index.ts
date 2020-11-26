@@ -1,28 +1,26 @@
-import * as functions from 'firebase-functions';
+import * as functions from "firebase-functions";
 
-import Koa from "koa";
-import BodyParser from "koa-bodyparser";
-import Logger from "koa-logger";
-import json from 'koa-json';
-import cors from '@koa/cors';
-// import serve from "koa-static";
+import express from "express";
+import cors from "cors";
 
-import router from './routes';
-
-const app = new Koa();
+import rootRouter from "./routes";
+import { FBAuthMiddleware } from "./middlewares";
+const app = express();
 
 // Middleware
-app.use(BodyParser());
-app.use(Logger());
-app.use(cors());
-app.use(json());
-
-
-app.use(router.routes()).use(router.allowedMethods());
-
+app
+  .use(express.json())
+  .use(express.urlencoded({ extended: true }))
+  .use(cors())
+  // .use("/", rootRouter);
+  .use("/", FBAuthMiddleware, rootRouter);
 
 // // Start writing Firebase Functions
 // // https://firebase.google.com/docs/functions/typescript
-console.log('Running')
+console.log("⚡️[server]: Server is running");
 
-export const api = functions.https.onRequest(app.callback())
+app.on("error", error => console.error(error));
+
+const runtimeOpts: functions.RuntimeOptions = { timeoutSeconds: 30 };
+
+export const api = functions.runWith(runtimeOpts).https.onRequest(app);
