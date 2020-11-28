@@ -7,9 +7,26 @@ import { firestore } from "firebase-admin";
 
 export const router = express.Router();
 
+interface HTTPError {
+  statusCode: number;
+}
+
+class HTTPError extends Error implements HTTPError {
+  constructor(code: number, message: string, extras?: any) {
+    super(message || StatusCodes[code]);
+    if (arguments.length >= 3 && extras) {
+      Object.assign(this, extras);
+    }
+    this.name = "HTTPError";
+    this.statusCode = code;
+  }
+}
+
 // const mock_data = [{ from: "test" }, { from: "teeee" }];
 
+// Base url: /api/post/
 router
+  // Get all posts
   .get("/", (req: Request, res: Response) => {
     //TODO: Fetch from firebase
     let posts: FirebaseFirestore.DocumentData[] = [];
@@ -29,6 +46,69 @@ router
     }
     return res.status(StatusCodes.OK).json({ posts });
   })
+  // Add post
+  .post(
+    "/",
+    schemaMiddleware(postSchema),
+    async (req: Request, res: Response) => {
+      // const newPost = ctx.request.body;
+      // console.log(req.body);
+      // const newPost = {};
+      const postDoc = db.collection("posts").doc();
+
+      postDoc
+        .create({
+          body: req.body.body,
+          userId: req.user.uid,
+          postId: postDoc.id,
+          displayName: req.user.displayName,
+          userImage: req.user.imageUrl,
+          createdAt: firestore.Timestamp.now(),
+          likeCount: 0,
+          commentCount: 0,
+        })
+        .then(writeRes => {
+          res
+            .status(StatusCodes.CREATED)
+            .send(`Post added succesfully: ${writeRes.writeTime.valueOf()}`);
+        });
+    }
+  )
+  // Delete a post
+  .delete("/:postId", (req: Request, res: Response) => {
+    const document = db.doc(`/posts/${req.params.postId}`);
+    document
+      .get()
+      .then(doc => {
+        const data = doc.data();
+        console.log(data);
+        if (!doc.exists || !data || !data.userId) {
+          throw new HTTPError(404, "Post nor found");
+        }
+        const { userId } = data;
+        if (userId !== req.user.uid) {
+          throw new HTTPError(403, "Unothorized");
+        } else {
+          return document.delete();
+        }
+      })
+      .then(writeRes => {
+        res
+          .status(StatusCodes.OK)
+          .json({ message: "Post deleted successfully", writeRes });
+      })
+      .catch((err: HTTPError) => {
+        console.error(err);
+        if (err instanceof HTTPError) {
+          return res
+            .status(err.statusCode)
+            .json({ error: err.name + err.message });
+        } else {
+          throw err;
+        }
+      });
+  })
+  // Get a post
   .get("/:postId", (req: Request, res: Response) => {
     let postData: FirebaseFirestore.DocumentData;
     db.doc(`/posts/${req.params.postId}`)
@@ -62,6 +142,7 @@ router
         res.status(500).json({ error: err.code });
       });
   })
+  // Like a post
   .get("/:postId/like", (req: Request, res: Response) => {
     const likeDocument = db
       .collection("likes")
@@ -92,6 +173,7 @@ router
             .collection("likes")
             .add({
               postId: req.params.postId,
+              userId: req.user.uid,
               displayName: req.user.displayName,
             })
             .then(() => {
@@ -110,7 +192,8 @@ router
         res.status(500).json({ error: err.code });
       });
   })
-  .get(":postId/unlike", (req: Request, res: Response) => {
+  // Unlke a post
+  .get("/:postId/unlike", (req: Request, res: Response) => {
     const likeDocument = db
       .collection("likes")
       .where("displayName", "==", req.user.displayName)
@@ -125,8 +208,7 @@ router
       .get()
       .then(value => {
         if (!value.exists) {
-          // res.status(404).json({ error: "Post not found" });
-          throw "Post not found";
+          throw new HTTPError(404, "Post not found");
         } else {
           postData = value.data();
           postData.postId = value.id;
@@ -136,7 +218,7 @@ router
       .then(value => {
         if (value.empty) {
           //  res.status(400).json({ error: "Post not liked" });
-          throw "Post not liked";
+          throw new HTTPError(400, "Post not liked");
         } else {
           return db
             .doc(`/likes/${value.docs[0].id}`)
@@ -150,12 +232,13 @@ router
             });
         }
       })
-      .catch(err => {
+      .catch((err: HTTPError) => {
         console.error(err);
-        res.status(500).json({ error: err.code });
+        res.status(err.statusCode).json({ error: err.message });
       });
   })
-  .post("/:postId/comment/create", (req: Request, res: Response) => {
+  // Create a comment
+  .post("/:postId/comment/", (req: Request, res: Response) => {
     if (req.body.body.trim() === "")
       return res.status(400).json({ comment: "Must not be empty" });
 
@@ -164,6 +247,7 @@ router
       createdAt: firestore.Timestamp.now(),
       postId: req.params.postId,
       displayName: req.user.displayName,
+      userId: req.user.uid,
       userImage: req.user.imageUrl,
     };
     console.log(newComment);
@@ -188,25 +272,6 @@ router
       });
 
     return res.status(StatusCodes.CREATED).json(newComment);
-  })
-  .post(
-    "/create",
-    schemaMiddleware(postSchema),
-    async (req: Request, res: Response) => {
-      // const newPost = ctx.request.body;
-      // console.log(req.body);
-      // const newPost = {};
-      const newPost = await db
-        .collection("posts")
-        .add(req.body)
-        .then(docRef => {
-          docRef.set({ postId: docRef.id }, { merge: true });
-          // return docRef.ge;
-        });
-      return res
-        .status(StatusCodes.CREATED)
-        .send(`Post added succesfully: ${newPost}`);
-    }
-  );
+  });
 
 export default router;
