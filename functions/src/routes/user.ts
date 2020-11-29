@@ -1,6 +1,12 @@
 import express, { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import firebase from "firebase";
 import { db, firebaseConfig, admin } from "../utils";
+import { schemaMiddleware, FBAuthMiddleware } from "../middlewares";
+import { userSignUpSchema, userLoginSchema } from "./schema";
+import { firestore } from "firebase-admin";
+
+firebase.initializeApp(firebaseConfig);
 
 export const router = express.Router();
 
@@ -9,18 +15,92 @@ interface HTTPError {
   statusCode: number;
 }
 class HTTPError extends Error implements HTTPError {
-  constructor(code: number, message: string, extras?: any) {
-    super(message || StatusCodes[code]);
+  constructor(statusCode: number, message: string, extras?: any) {
+    super(message);
     if (arguments.length >= 3 && extras) {
       Object.assign(this, extras);
     }
     this.name = "HTTPError";
-    this.statusCode = code;
+    this.statusCode = this.statusCode;
   }
 }
 
 router
-  // Create user
+  // User Signup
+  .post("/signup", schemaMiddleware(userSignUpSchema), async (req, res) => {
+    const newUser = {
+        email: req.body.email,
+        password: req.body.password,
+        confirmPassword: req.body.confirmPassword,
+        displayName: req.body.displayName,
+      },
+      noImg = "no-img.png";
+
+    let token: string, userId: string;
+    firebase
+      .auth()
+      .createUserWithEmailAndPassword(newUser.email, newUser.password)
+      .then(({ user }) => {
+        if (!user)
+          throw new HTTPError(StatusCodes.BAD_REQUEST, "user not created");
+        userId = user.uid;
+        return user.getIdToken();
+      })
+      .then(idToken => {
+        token = idToken;
+        const userCredentials = {
+          userId,
+          displayName: newUser.displayName,
+          email: newUser.email,
+          createdAt: firestore.Timestamp.now(),
+
+          //TODO Append token to imageUrl. Work around just add token from image in storage.
+          imageUrl: `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${noImg}?alt=media`,
+        };
+        return db.doc(`/users/${userId}`).set(userCredentials);
+      })
+      .then(writeRes => {
+        return res
+          .status(StatusCodes.CREATED)
+          .json({ token, createdAt: writeRes });
+      })
+      .catch((err: HTTPError & firebase.auth.AuthError) => {
+        console.error(err);
+        if (err.code && err.code === "auth/email-already-in-use") {
+          return res.status(400).json({ email: "Email is already is use" });
+        } else {
+          return res.status(err.statusCode).json({
+            general: "Something went wrong, please try again",
+            message: err.message,
+          });
+        }
+      });
+  })
+  // User Login
+  .post("/login", schemaMiddleware(userLoginSchema), (req, res) => {
+    const user = {
+      email: req.body.email,
+      password: req.body.password,
+    };
+
+    firebase
+      .auth()
+      .signInWithEmailAndPassword(user.email, user.password)
+      .then(data => {
+        return data.user.getIdToken();
+      })
+      .then(token => {
+        return res.status(StatusCodes.OK).json({ token });
+      })
+      .catch(err => {
+        console.error(err);
+        // auth/wrong-password
+        // auth/user-not-user
+        return res
+          .status(403)
+          .json({ general: "Wrong credentials, please try again" });
+      });
+  })
   .post("/create", async (req: Request, res: Response) => {
     console.log(req.body, "body");
     const userAuth = req.body.userAuth,
@@ -46,7 +126,7 @@ router
     return res.status(StatusCodes.OK).json(await userRef.get());
   })
   //  Get own usr detail
-  .get("/detail", (req: Request, res: Response) => {
+  .get("/detail", FBAuthMiddleware, (req: Request, res: Response) => {
     let userData: any = {};
     db.doc(`/users/${req.user.uid}`)
       .get()
@@ -101,7 +181,7 @@ router
       });
   })
   // Get other users detail
-  .get("/:userId/detail", (req: Request, res: Response) => {
+  .get("/:userId/detail", FBAuthMiddleware, (req: Request, res: Response) => {
     let userData: any = {};
     db.doc(`/users/${req.params.userId}`)
       .get()
@@ -139,7 +219,7 @@ router
       });
   })
   // Upload a profile image
-  .post("/image", async (req: Request, res: Response) => {
+  .post("/image", FBAuthMiddleware, async (req: Request, res: Response) => {
     const { default: BusBoy } = await import("busboy"),
       path = await import("path"),
       os = await import("os"),
@@ -215,7 +295,7 @@ router
     busboy.end(req.rawBody);
   })
   // Mark notification read
-  .post("/notifications", (req, res) => {
+  .post("/notifications", FBAuthMiddleware, (req, res) => {
     let batch = db.batch();
     req.body.forEach((notificationId: string) => {
       const notification: FirebaseFirestore.DocumentReference = db.doc(

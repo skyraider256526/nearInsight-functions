@@ -5,7 +5,6 @@ import express from "express";
 import cors from "cors";
 
 import rootRouter from "./routes";
-import { FBAuthMiddleware } from "./middlewares";
 import { db } from "./utils";
 import { firestore } from "firebase-admin";
 const app = express();
@@ -16,7 +15,7 @@ app
   .use(express.urlencoded({ extended: true }))
   .use(cors())
   // .use("/", rootRouter);
-  .use("/", FBAuthMiddleware, rootRouter);
+  .use("/", rootRouter);
 
 // // Start writing Firebase Functions
 // // https://firebase.google.com/docs/functions/typescript
