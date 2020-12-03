@@ -1,5 +1,8 @@
 import express, { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import axios from "axios";
+import { apiKey } from "../utils";
+
 import { db } from "../utils";
 import { schemaMiddleware } from "../middlewares";
 import { postSchema } from "./schema";
@@ -31,20 +34,34 @@ router
     //TODO: Fetch from firebase
     let posts: FirebaseFirestore.DocumentData[] = [];
     try {
-      db.collection("posts")
-        .orderBy("createdAt", "desc")
-        .get()
-        .then(data => {
-          data.forEach(doc => {
-            posts.push(doc.data());
-          });
-        });
+      axios
+        .get(`https://us1.locationiq.com/v1/reverse.php?`, {
+          params: {
+            key: apiKey.locationIQ_API,
+            format: "json",
+            lat: req.query.latitude,
+            lon: req.query.longitude,
+          },
+        })
+        .then(response => {
+          db.collection("/posts/")
+            .orderBy("createdAt", "desc")
+            .where("state", "==", response.data.address.state)
+            .get()
+            .then(data => {
+              data.forEach(doc => {
+                posts.push(doc.data());
+              });
+              return res.status(StatusCodes.OK).json({ posts });
+            });
+        })
+        .catch(err => console.error(err));
     } catch (error) {
       return res
         .status(StatusCodes.BAD_REQUEST)
         .json(`${req.path}  /GET: ${error}`);
     }
-    return res.status(StatusCodes.OK).json({ posts });
+    return;
   })
   // Add post
   .post(
@@ -55,22 +72,56 @@ router
       // console.log(req.body);
       // const newPost = {};
       const postDoc = db.collection("posts").doc();
-
-      postDoc
-        .create({
-          body: req.body.body,
-          userId: req.user.uid,
-          postId: postDoc.id,
-          displayName: req.user.displayName,
-          userImage: req.user.imageUrl,
-          createdAt: firestore.Timestamp.now(),
-          likeCount: 0,
-          commentCount: 0,
+      console.log(req.body);
+      axios
+        .get(`https://us1.locationiq.com/v1/reverse.php?`, {
+          params: {
+            key: apiKey.locationIQ_API,
+            format: "json",
+            lat: req.body.position.latitude,
+            lon: req.body.position.longitude,
+          },
         })
-        .then(writeRes => {
-          res
-            .status(StatusCodes.CREATED)
-            .send(`Post added succesfully: ${writeRes.writeTime.valueOf()}`);
+        .then(response => {
+          console.log(response.data.address);
+          postDoc
+            .create({
+              body: req.body.body,
+              userId: req.user.uid,
+              postId: postDoc.id,
+              displayName: req.user.displayName,
+              userImage: req.user.imageUrl,
+              createdAt: firestore.Timestamp.now(),
+              likeCount: 0,
+              commentCount: 0,
+              location: response.data.address,
+              state: response.data.address.state,
+            })
+            .then(writeRes => {
+              res
+                //@ts-ignore
+                .status(StatusCodes.CREATED)
+                .json({
+                  body: req.body.body,
+                  userId: req.user.uid,
+                  postId: postDoc.id,
+                  displayName: req.user.displayName,
+                  userImage: req.user.imageUrl,
+                  createdAt: firestore.Timestamp.now(),
+                  likeCount: 0,
+                  commentCount: 0,
+                  location: response.data.address,
+                  state: response.data.address.state,
+                });
+            })
+            .catch(err => {
+              console.log(err);
+              res.status(404).json(err);
+            });
+        })
+        .catch(err => {
+          console.log(err);
+          res.status(404).json(err);
         });
     }
   )
@@ -260,8 +311,9 @@ router
           return res.status(404).json({ error: "Post not found" });
         }
         const post = doc.data();
-        if (post && post.commentCount)
+        if (post) {
           return doc.ref.update({ commentCount: post.commentCount + 1 });
+        }
       })
       .then(() => {
         db.collection("comments").add(newComment);

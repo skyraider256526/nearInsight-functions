@@ -26,7 +26,6 @@ export function FBAuthMiddleware(
     .then(decodedToken => {
       //@ts-ignore
       req.user = decodedToken;
-      // console.log(req.user);
 
       return db.doc(`users/${req.user.uid}`).get();
     })

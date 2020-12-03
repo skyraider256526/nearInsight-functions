@@ -87,6 +87,7 @@ router
       .auth()
       .signInWithEmailAndPassword(user.email, user.password)
       .then(data => {
+        //@ts-ignore
         return data.user.getIdToken();
       })
       .then(token => {
@@ -101,35 +102,26 @@ router
           .json({ general: "Wrong credentials, please try again" });
       });
   })
-  .post("/create", async (req: Request, res: Response) => {
-    console.log(req.body, "body");
-    const userAuth = req.body.userAuth,
-      userRef = db.doc(`users/${userAuth.uid}`),
-      noImg = "no-img.png",
-      snapShot = await userRef.get();
+  // Add user details
+  .post("/detail", FBAuthMiddleware, (req, res) => {
+    let userDetails = req.body;
 
-    if (!snapShot.exists) {
-      const { displayName, email } = userAuth,
-        createdAt = new Date();
-      try {
-        await userRef.set({
-          userId: userAuth.uid,
-          displayName,
-          email,
-          createdAt,
-          imageUrl: `https://firebasestorage.googleapis.com/v0/b/${firebaseConfig.storageBucket}/o/${noImg}?alt=media`,
-        });
-      } catch (error) {
-        console.error("error creating user", error.message);
-      }
-    }
-    return res.status(StatusCodes.OK).json(await userRef.get());
+    db.doc(`/users/${req.user.uid}`)
+      .update(userDetails)
+      .then(() => {
+        return res.json({ message: "Details added successfully" });
+      })
+      .catch(err => {
+        console.error(err);
+        return res.status(500).json({ error: err.code });
+      });
   })
   //  Get own usr detail
   .get("/detail", FBAuthMiddleware, (req: Request, res: Response) => {
     let userData: any = {};
     db.doc(`/users/${req.user.uid}`)
       .get()
+      //@ts-ignore
       .then(doc => {
         if (doc.exists) {
           const data = doc.data();
@@ -142,6 +134,7 @@ router
           }
         }
       })
+      //@ts-ignore
       .then(data => {
         if (data) {
           userData.likes = [];

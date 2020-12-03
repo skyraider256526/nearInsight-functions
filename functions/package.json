@@ -6,7 +6,7 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
-    "emulator": "firebase emulators:start --import=./misc/ --export-on-exit",
+    "emulator": "firebase emulators:start --import=./misc/emulator-data/ --export-on-exit",
     "start:dev": "run-p --race --print-label build emulator",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
@@ -16,6 +16,7 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "axios": "^0.21.0",
     "busboy": "^0.3.1",
     "cors": "^2.8.5",
     "express": "^4.17.1",

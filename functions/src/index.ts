@@ -112,7 +112,7 @@ export const onUserImageChange = functions.firestore
 export const onPostDelete = functions.firestore
   .document("/posts/{postId}")
   .onDelete((snapshot, context) => {
-    const screamId = context.params.postId;
+    const postId = context.params.postId;
     const batch = db.batch();
     return db
       .collection("comments")
@@ -130,7 +130,7 @@ export const onPostDelete = functions.firestore
         });
         return db
           .collection("notifications")
-          .where("postId", "==", screamId)
+          .where("postId", "==", postId)
           .get();
       })
       .then(data => {

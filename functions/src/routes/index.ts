@@ -7,5 +7,6 @@ import userRouter from "./user";
 const rootRouter = Router();
 
 rootRouter.use("/post", FBAuthMiddleware, postRouter).use("/user", userRouter);
+// rootRouter.use("/post", postRouter).use("/user", userRouter);
 
 export default rootRouter;

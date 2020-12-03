@@ -1,2 +1,2 @@
 export { admin, db } from "./admin";
-export { firebaseConfig } from "./config";
+export { firebaseConfig, apiKey } from "./config";

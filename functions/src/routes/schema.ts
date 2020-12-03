@@ -1,6 +1,13 @@
 import Joi from "joi";
+
 export const postSchema = Joi.object().keys({
   body: Joi.string().required(),
+  position: Joi.object()
+    .keys({
+      latitude: Joi.number().required(),
+      longitude: Joi.number().required(),
+    })
+    .required(),
 });
 
 export const userSignUpSchema = Joi.object().keys({

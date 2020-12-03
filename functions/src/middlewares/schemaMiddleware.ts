@@ -9,10 +9,12 @@ export const schemaMiddleware = (schema: any) => {
       next();
     } else {
       const { details } = error;
-      const message = details.map((i: any) => i.message).join(",");
+      let message = details.map((i: any) => i.message).join(",");
 
+      const name = message.match(/(?<=").*(?=")/);
+      message = message.replace(/\"/g, "");
       console.log("error", message);
-      res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ error: message });
+      res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ [name]: message });
     }
   };
 };

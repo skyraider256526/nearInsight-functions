@@ -11,3 +11,4 @@ typings/
 # Node.js dependency directory
 node_modules/
 misc/
+.runtimeconfig.json
